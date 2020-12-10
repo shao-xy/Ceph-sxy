@@ -2,3 +2,15 @@
 /.git_version
 /ceph_ver.h
 /gf_vect_dot_prod_avx2.o
+
+/boost/b2
+/boost/bin.v2/
+/boost/bjam
+/boost/boost/chrono/stopwatches
+/boost/boost/chrono/stopwatches.hpp
+/boost/libs/config/checks/architecture/bin/
+/boost/project-config.jam
+/boost/project-config.jam.1
+/boost/stage/
+/boost/tools/build/src/engine/bin.linuxx86_64/
+/boost/tools/build/src/engine/bootstrap/

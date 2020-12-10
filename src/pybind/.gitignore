@@ -1,1 +1,5 @@
 /__pycache__
+/cephfs/cephfs.c
+/rados/rados.c
+/rbd/rbd.c
+/rgw/rgw.c
