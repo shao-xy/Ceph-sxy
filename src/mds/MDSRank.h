@@ -116,6 +116,12 @@ class Finisher;
 class MMDSMap;
 class ScrubStack;
 
+#ifdef SXYMOD_MDS
+namespace sxy {
+  class MDSMonitor;
+};
+#endif
+
 /**
  * The public part of this class's interface is what's exposed to all
  * the various subsystems (server, mdcache, etc), such as pointers
@@ -172,7 +178,6 @@ class MDSRank {
     ScrubStack   *scrubstack;
     DamageTable  damage_table;
 
-
     InoTable     *inotable;
 
     SnapServer   *snapserver;
@@ -180,6 +185,10 @@ class MDSRank {
 
     MDSTableClient *get_table_client(int t);
     MDSTableServer *get_table_server(int t);
+
+#ifdef SXYMOD_MDS
+    sxy::MDSMonitor *smon;
+#endif
 
     SessionMap   sessionmap;
     Session *get_session(client_t client) {

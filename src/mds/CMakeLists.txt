@@ -40,4 +40,9 @@ set(mds_srcs
   ${CMAKE_SOURCE_DIR}/src/osdc/Journaler.cc)
 add_library(mds STATIC ${mds_srcs}
   $<TARGET_OBJECTS:heap_profiler_objs>)
-target_link_libraries(mds ${ALLOC_LIBS} osdc liblua)
+#target_link_libraries(mds ${ALLOC_LIBS} osdc liblua)
+if (WITH_SXYMOD)
+	target_link_libraries(mds ${ALLOC_LIBS} osdc liblua sxy-mds)
+else()
+	target_link_libraries(mds ${ALLOC_LIBS} osdc liblua)
+endif()

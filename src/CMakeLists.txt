@@ -595,6 +595,13 @@ if(WITH_LTTNG AND WITH_EVENTTRACE)
   list(APPEND libcommon_files common/EventTrace.cc)
 endif()
 
+# Keep these lines above add_subdirectory command on the target directories, e.g. mds, osd, etc., to make the macro enabled.
+set(WITH_SXYMOD "true")
+if (WITH_SXYMOD)
+	add_definitions(-DSXYMOD_MDS)
+	add_subdirectory(sxy)
+endif()
+
 set(common_mountcephfs_files
   common/armor.c
   common/safe_io.c

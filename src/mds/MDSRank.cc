@@ -36,6 +36,9 @@
 #include "common/HeartbeatMap.h"
 #include "ScrubStack.h"
 
+#ifdef SXYMOD_MDS
+#include "sxy/mds/MDSMonitor.h"
+#endif
 
 #include "MDSRank.h"
 
@@ -64,6 +67,9 @@ MDSRank::MDSRank(
     balancer(NULL), scrubstack(NULL),
     damage_table(whoami_),
     inotable(NULL), snapserver(NULL), snapclient(NULL),
+#ifdef SXYMOD_MDS
+    smon(NULL),
+#endif
     sessionmap(this), logger(NULL), mlogger(NULL),
     op_tracker(g_ceph_context, g_conf->mds_enable_op_tracker,
                g_conf->osd_num_op_tracker_shard),
@@ -115,6 +121,10 @@ MDSRank::MDSRank(
   server = new Server(this);
   locker = new Locker(this, mdcache);
 
+#ifdef SXYMOD_MDS
+  smon = new sxy::MDSMonitor(this);
+#endif
+
   op_tracker.set_complaint_and_threshold(cct->_conf->mds_op_complaint_time,
                                          cct->_conf->mds_op_log_threshold);
   op_tracker.set_history_size_and_duration(cct->_conf->mds_op_history_size,
@@ -138,6 +148,13 @@ MDSRank::~MDSRank()
 
   if (server) { delete server; server = 0; }
   if (locker) { delete locker; locker = 0; }
+
+#ifdef SXYMOD_MDS
+  if (smon) {
+    smon->terminate();
+    delete smon; smon = 0;
+  }
+#endif
 
   if (logger) {
     g_ceph_context->get_perfcounters_collection()->remove(logger);
