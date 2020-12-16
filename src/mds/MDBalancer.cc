@@ -465,14 +465,36 @@ void MDBalancer::export_empties()
 
 
 
+#ifdef SXYMODMDS_BAL_METRIC
+double MDBalancer::try_match(balance_state_t& state, mds_rank_t ex, double& maxex,
+                             mds_rank_t im, double& maxim, double load_fac)
+#else
 double MDBalancer::try_match(balance_state_t& state, mds_rank_t ex, double& maxex,
                              mds_rank_t im, double& maxim)
+#endif
 {
   if (maxex <= 0 || maxim <= 0) return 0.0;
 
   double howmuch = MIN(maxex, maxim);
   if (howmuch <= 0) return 0.0;
 
+#ifdef SXYMODMDS_BAL_METRIC
+  double howmuchload = howmuch * load_fac;
+  dout(5) << "   - mds." << ex << " exports " << howmuchload << " (iops=" << howmuch << ") to mds." << im << dendl;
+
+  if (ex == mds->get_nodeid())
+    state.targets[im] += howmuchload;
+
+  state.exported[ex] += howmuchload;
+  state.imported[im] += howmuchload;
+
+  // These two variables means the unbalanced iops, not mds_load
+  // We do not modify this
+  maxex -= howmuch;
+  maxim -= howmuch;
+
+  return howmuch;
+#else
   dout(5) << "   - mds." << ex << " exports " << howmuch << " to mds." << im << dendl;
 
   if (ex == mds->get_nodeid())
@@ -485,6 +507,7 @@ double MDBalancer::try_match(balance_state_t& state, mds_rank_t ex, double& maxe
   maxim -= howmuch;
 
   return howmuch;
+#endif
 }
 
 void MDBalancer::queue_split(const CDir *dir, bool fast)
@@ -626,7 +649,15 @@ void MDBalancer::prep_rebalance(int beat)
 
     mds->mdcache->migrator->clear_export_queue();
 
-#ifndef SXYMODMDS_BAL_METRIC
+#ifdef SXYMODMDS_BAL_METRIC
+    // We use load factor as well, to rescale iops into original load for migration
+    double load_fac = 1.0;
+    map<mds_rank_t, int>::iterator m = mds_load.find(whoami);
+    if ((m != mds_load.end()) && (m->second > 0)) {
+      double iopsld = m->second;
+      load_fac = get_load(rebalance_time).auth.meta_load(rebalance_time, mds->mdcache->decayrate) / iopsld;
+    }
+#else
     // rescale!  turn my mds_load back into meta_load units
     double load_fac = 1.0;
     map<mds_rank_t, mds_load_t>::iterator m = mds_load.find(whoami);
@@ -755,7 +786,11 @@ void MDBalancer::prep_rebalance(int beat)
         double maxex = get_maxex(state, ex->second);
 	double maxim = get_maxim(state, im->second);
 	if (maxex < .001 || maxim < .001) break;
+#ifdef SXYMODMDS_BAL_METRIC
+	try_match(state, ex->second, maxex, im->second, maxim, load_fac);
+#else
 	try_match(state, ex->second, maxex, im->second, maxim);
+#endif
 	if (maxex <= .001) ++ex;
 	if (maxim <= .001) ++im;
       }
@@ -769,7 +804,11 @@ void MDBalancer::prep_rebalance(int beat)
         double maxex = get_maxex(state, ex->second);
 	double maxim = get_maxim(state, im->second);
 	if (maxex < .001 || maxim < .001) break;
+#ifdef SXYMODMDS_BAL_METRIC
+	try_match(state, ex->second, maxex, im->second, maxim, load_fac);
+#else
 	try_match(state, ex->second, maxex, im->second, maxim);
+#endif
 	if (maxex <= .001) ++ex;
 	if (maxim <= .001) ++im;
       }
@@ -845,6 +884,8 @@ int MDBalancer::mantle_prep_rebalance()
 
 void MDBalancer::try_rebalance(balance_state_t& state)
 {
+  dout(5) << __func__ << " start." << dendl;
+
   if (g_conf->mds_thrash_exports) {
     dout(5) << "mds_thrash is on; not performing standard rebalance operation!"
 	    << dendl;
@@ -881,6 +922,7 @@ void MDBalancer::try_rebalance(balance_state_t& state)
     import_from_map.insert(pair<mds_rank_t,CDir*>(from, im));
   }
 
+  dout(5) << __func__ << " Before do my exports" << dendl;
 
 
   // do my exports!
@@ -891,7 +933,7 @@ void MDBalancer::try_rebalance(balance_state_t& state)
     double amount = it.second;
 
     if (amount < MIN_OFFLOAD) continue;
-    if (amount / target_load < .2) continue;
+    // if (amount / target_load < .2) continue;
 
     dout(5) << "want to send " << amount << " to mds." << target
       //<< " .. " << (*it).second << " * " << load_fac

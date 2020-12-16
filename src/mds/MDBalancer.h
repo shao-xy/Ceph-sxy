@@ -110,9 +110,16 @@ private:
                     double& have,
                     set<CDir*>& already_exporting);
 
+#ifdef SXYMODMDS_BAL_METRIC
+  double try_match(balance_state_t &state,
+                   mds_rank_t ex, double& maxex,
+                   mds_rank_t im, double& maxim,
+		   double load_fac = 1.0);
+#else
   double try_match(balance_state_t &state,
                    mds_rank_t ex, double& maxex,
                    mds_rank_t im, double& maxim);
+#endif
 
   double get_maxim(balance_state_t &state, mds_rank_t im) {
     return target_load - mds_meta_load[im] - state.imported[im];
