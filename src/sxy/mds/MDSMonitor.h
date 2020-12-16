@@ -19,8 +19,12 @@ class MDSMonitor : public Thread {
     bool m_runFlag;
   
     int m_last_iocnt;
-    int iops();
+    int iops(); // update IOPS per second
+    int m_last_iops; // for get_iops()
+  public:
+    int get_iops() { return m_last_iops; }
 
+  private:
     mds_load_t mds_load();
   
   private:

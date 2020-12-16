@@ -26,9 +26,16 @@ using std::map;
 #include "common/Clock.h"
 #include "common/Cond.h"
 
+#ifdef SXYMOD_MDS
+#include "sxy/mds/macroconfig.h"
+#endif
+
 class MDSRank;
 class Message;
 class MHeartbeat;
+#ifdef SXYMODMDS_BAL_METRIC
+class MIOPSHeartbeat;
+#endif
 class CInode;
 class CDir;
 class Messenger;
@@ -92,7 +99,11 @@ private:
   void export_empties();
   int localize_balancer();
   void send_heartbeat();
+#ifdef SXYMODMDS_BAL_METRIC
+  void handle_heartbeat(MIOPSHeartbeat *m);
+#else
   void handle_heartbeat(MHeartbeat *m);
+#endif
   void find_exports(CDir *dir,
                     double amount,
                     list<CDir*>& exports,
@@ -139,7 +150,11 @@ private:
   set<dirfrag_t>   split_pending, merge_pending;
 
   // per-epoch scatter/gathered info
+#ifdef SXYMODMDS_BAL_METRIC
+  map<mds_rank_t, int>  mds_load;
+#else
   map<mds_rank_t, mds_load_t>  mds_load;
+#endif
   map<mds_rank_t, double>       mds_meta_load;
   map<mds_rank_t, map<mds_rank_t, float> > mds_import_map;
 

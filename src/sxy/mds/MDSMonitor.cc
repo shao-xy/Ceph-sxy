@@ -17,7 +17,7 @@
 namespace sxy {
 
 MDSMonitor::MDSMonitor(MDSRank * mds)
-    : mds(mds), m_runFlag(true), m_last_iocnt(0L)
+    : mds(mds), m_runFlag(true), m_last_iocnt(0), m_last_iops(0)
 {
   // We start immediately in constructor function
   dout(0) << "Launching monitor thread " << dendl;
@@ -41,9 +41,9 @@ MDSMonitor::~MDSMonitor()
 int MDSMonitor::iops()
 {
   int cnt_now = mds->get_req_rate();
-  int iocnt = cnt_now - m_last_iocnt;
+  m_last_iops = cnt_now - m_last_iocnt;
   m_last_iocnt = cnt_now;
-  return iocnt;
+  return m_last_iops;
 }
 
 mds_load_t MDSMonitor::mds_load()

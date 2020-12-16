@@ -28,6 +28,10 @@
 #include "include/Context.h"
 #include "msg/Messenger.h"
 #include "messages/MHeartbeat.h"
+#ifdef SXYMODMDS_BAL_METRIC
+#include "sxy/mds/MDSMonitor.h"
+#include "sxy/messages/MIOPSHeartbeat.h"
+#endif
 
 #include <fstream>
 #include <iostream>
@@ -65,8 +69,13 @@ int MDBalancer::proc_message(Message *m)
 {
   switch (m->get_type()) {
 
+#ifdef SXYMODMDS_BAL_METRIC
+  case MSG_MDS_HEARTBEAT_IOPS:
+    handle_heartbeat(static_cast<MIOPSHeartbeat*>(m));
+#else
   case MSG_MDS_HEARTBEAT:
     handle_heartbeat(static_cast<MHeartbeat*>(m));
+#endif
     break;
 
   default:
@@ -307,8 +316,13 @@ void MDBalancer::send_heartbeat()
   }
 
   // my load
+#ifdef SXYMODMDS_BAL_METRIC
+  int load = mds->smon->get_iops();
+  map<mds_rank_t, int>::value_type val(mds->get_nodeid(), load);
+#else
   mds_load_t load = get_load(now);
   map<mds_rank_t, mds_load_t>::value_type val(mds->get_nodeid(), load);
+#endif
   mds_load.insert(val);
 
   // import_map -- how much do i import from whom
@@ -340,7 +354,11 @@ void MDBalancer::send_heartbeat()
   for (set<mds_rank_t>::iterator p = up.begin(); p != up.end(); ++p) {
     if (*p == mds->get_nodeid())
       continue;
+#ifdef SXYMODMDS_BAL_METRIC
+    MIOPSHeartbeat *hb = new MIOPSHeartbeat(load, beat_epoch);
+#else
     MHeartbeat *hb = new MHeartbeat(load, beat_epoch);
+#endif
     hb->get_import_map() = import_map;
     messenger->send_message(hb,
                             mds->mdsmap->get_inst(*p));
@@ -348,9 +366,15 @@ void MDBalancer::send_heartbeat()
 }
 
 /* This function DOES put the passed message before returning */
+#ifdef SXYMODMDS_BAL_METRIC
+void MDBalancer::handle_heartbeat(MIOPSHeartbeat *m)
+{
+  typedef map<mds_rank_t, int> mds_load_map_t;
+#else
 void MDBalancer::handle_heartbeat(MHeartbeat *m)
 {
   typedef map<mds_rank_t, mds_load_t> mds_load_map_t;
+#endif
 
   mds_rank_t who = mds_rank_t(m->get_source().num());
   dout(25) << "=== got heartbeat " << m->get_beat() << " from " << m->get_source().num() << " " << m->get_load() << dendl;
@@ -602,6 +626,7 @@ void MDBalancer::prep_rebalance(int beat)
 
     mds->mdcache->migrator->clear_export_queue();
 
+#ifndef SXYMODMDS_BAL_METRIC
     // rescale!  turn my mds_load back into meta_load units
     double load_fac = 1.0;
     map<mds_rank_t, mds_load_t>::iterator m = mds_load.find(whoami);
@@ -614,21 +639,32 @@ void MDBalancer::prep_rebalance(int beat)
 	      << " / " << mdsld
 	      << dendl;
     }
+#endif
 
     double total_load = 0.0;
     multimap<double,mds_rank_t> load_map;
     for (mds_rank_t i=mds_rank_t(0); i < mds_rank_t(cluster_size); i++) {
+#ifdef SXYMODMDS_BAL_METRIC
+      map<mds_rank_t, int>::value_type val(i, 0);
+      std::pair < map<mds_rank_t, int>::iterator, bool > r(mds_load.insert(val));
+      int load = r.first->second;
+
+      double l = (double)load;
+#else
       map<mds_rank_t, mds_load_t>::value_type val(i, mds_load_t(ceph_clock_now()));
       std::pair < map<mds_rank_t, mds_load_t>::iterator, bool > r(mds_load.insert(val));
       mds_load_t &load(r.first->second);
 
       double l = load.mds_load() * load_fac;
+#endif
       mds_meta_load[i] = l;
 
       if (whoami == 0)
 	dout(5) << "  mds." << i
 		<< " " << load
+#ifndef SXYMODMDS_BAL_METRIC
 		<< " = " << load.mds_load()
+#endif
 		<< " ~ " << l << dendl;
 
       if (whoami == i) my_load = l;
@@ -767,6 +803,17 @@ int MDBalancer::mantle_prep_rebalance()
   for (mds_rank_t i=mds_rank_t(0);
        i < mds_rank_t(cluster_size);
        i++) {
+#ifdef SXYMODMDS_BAL_METRIC
+    map<mds_rank_t, int>::value_type val(i, 0);
+    std::pair < map<mds_rank_t, int>::iterator, bool > r(mds_load.insert(val));
+    int load = r.first->second;
+
+    metrics[i] = {{"auth.meta_load", 0.0},
+                  {"all.meta_load", 0.0},
+                  {"req_rate", load},
+                  {"queue_len", 0.0},
+                  {"cpu_load_avg", 0.0}};
+#else
     map<mds_rank_t, mds_load_t>::value_type val(i, mds_load_t(ceph_clock_now()));
     std::pair < map<mds_rank_t, mds_load_t>::iterator, bool > r(mds_load.insert(val));
     mds_load_t &load(r.first->second);
@@ -776,6 +823,7 @@ int MDBalancer::mantle_prep_rebalance()
                   {"req_rate", load.req_rate},
                   {"queue_len", load.queue_len},
                   {"cpu_load_avg", load.cpu_load_avg}};
+#endif
   }
 
   /* execute the balancer */

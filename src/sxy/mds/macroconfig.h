@@ -6,4 +6,6 @@
 #define SXYMOD_MDS
 #endif
 
+#define SXYMODMDS_BAL_METRIC
+
 #endif /* sxy/mds/macroconfig.h */
