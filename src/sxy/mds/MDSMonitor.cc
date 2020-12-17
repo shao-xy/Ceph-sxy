@@ -55,6 +55,7 @@ void MDSMonitor::writelog()
 {
   std::stringstream ss;
   ss << "MDS_MONITOR IOPS " << iops(); // IOPS
+  ss << " Inodes " << mds->mdcache->lru.lru_get_size(); // Cached inodes size
   mds_load_t load(mds_load());
   ss << " MDSLoad " << load;
   dout(0) << ss.str() << dendl;
