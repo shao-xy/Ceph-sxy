@@ -418,6 +418,10 @@ class MDSRank {
     MDSMap *get_mds_map() { return mdsmap; }
 
     int get_req_rate() const { return logger->get(l_mds_request); }
+
+#ifdef SXYMOD_MDS
+    int get_forwarded() const { return logger->get(l_mds_forward); }
+#endif
   
     int get_mds_slow_req_count() const { return mds_slow_req_count; }
 

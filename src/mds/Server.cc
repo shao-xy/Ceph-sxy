@@ -1442,6 +1442,14 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
       }
     }
 
+#ifdef SXYMODMDS_FORWARDTRACE
+    dout(14) << SXYMODMDS_FORWARDTRACE << " request_reply before record " << *mdr << " clientreq " << req->srec << dendl;
+    req->record_mds_reply_time(mds->get_nodeid(), ceph_clock_now());
+    dout(14) << SXYMODMDS_FORWARDTRACE << " request_reply after record" << *mdr << " clientreq " << req->srec << dendl;
+    reply->copy_stamps(req);
+    dout(4) << SXYMODMDS_FORWARDTRACE << " reply_client " << req->get_tid() << " " << reply->srec << dendl;
+#endif
+
     // We can set the extra bl unconditionally: if it's already been sent in the
     // early_reply, set_extra_bl will have claimed it and reply_extra_bl is empty
     reply->set_extra_bl(mdr->reply_extra_bl);
@@ -1586,6 +1594,10 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
 void Server::handle_client_request(MClientRequest *req)
 {
   dout(4) << "handle_client_request " << *req << dendl;
+//#ifdef SXYMODMDS_FORWARDTRACE
+//  req->record_mds_handle_time(mds->get_nodeid(), ceph_clock_now());
+//  dout(0) << SXYMODMDS_FORWARDTRACE << " clientreq " << req->srec << dendl;
+//#endif
 
   if (mds->logger)
     mds->logger->inc(l_mds_request);
@@ -1745,6 +1757,11 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
   }
 
   MClientRequest *req = mdr->client_request;
+
+#ifdef SXYMODMDS_FORWARDTRACE
+  req->record_mds_handle_time(mds->get_nodeid(), ceph_clock_now());
+  dout(0) << SXYMODMDS_FORWARDTRACE << " clientreq " << req->srec << dendl;
+#endif
 
   if (logger) logger->inc(l_mdss_dispatch_client_request);
 

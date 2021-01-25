@@ -200,6 +200,13 @@ struct InodeStat {
 
 
 class MClientReply : public Message {
+#ifdef SXYMODMDS_FORWARDTRACE
+public:
+  ClientRequestHandlingRecorder srec;
+  void copy_stamps(MClientRequest * req) {
+    srec.claim(req->srec);
+  }
+#endif
   // reply data
 public:
   struct ceph_mds_reply_head head;
@@ -255,6 +262,9 @@ public:
   // serialization
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
+#ifdef SXYMODMDS_FORWARDTRACE
+    ::decode(srec, p);
+#endif
     ::decode(head, p);
     ::decode(trace_bl, p);
     ::decode(extra_bl, p);
@@ -262,6 +272,9 @@ public:
     assert(p.end());
   }
   void encode_payload(uint64_t features) override {
+#ifdef SXYMODMDS_FORWARDTRACE
+    ::encode(srec, payload);
+#endif
     ::encode(head, payload);
     ::encode(trace_bl, payload);
     ::encode(extra_bl, payload);

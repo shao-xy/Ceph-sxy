@@ -745,3 +745,104 @@ ostream& operator<<(ostream &out, const mds_role_t &role)
   return out;
 }
 
+#ifdef SXYMODMDS_FORWARDTRACE
+string sxy_request_handle_record_typename(ClientRequestHandlingRecorder::RecordType type)
+{
+  switch (type) {
+    case ClientRequestHandlingRecorder::RecordType::FORWARD: return "fwd";
+    case ClientRequestHandlingRecorder::RecordType::RETRY: return "retry";
+    case ClientRequestHandlingRecorder::RecordType::REPLY: return "reply";
+    case ClientRequestHandlingRecorder::RecordType::_NULL:
+    default: return "null";
+  }
+}
+
+void ClientRequestHandlingRecorder::Record::encode(bufferlist& bl) const
+{
+  ENCODE_START(2, 2, bl);
+  ::encode(who, bl);
+  ::encode(start, bl);
+  ::encode(end, bl);
+  ::encode(type, bl);
+  ENCODE_FINISH(bl);
+}
+
+void ClientRequestHandlingRecorder::Record::decode(bufferlist::iterator& bl)
+{
+  DECODE_START(2, bl);
+  ::decode(who, bl);
+  ::decode(start, bl);
+  ::decode(end, bl);
+  ::decode(type, bl);
+  DECODE_FINISH(bl);
+}
+
+void ClientRequestHandlingRecorder::encode(bufferlist& bl) const
+{
+  ENCODE_START(2, 2, bl);
+  ::encode(stamps, bl);
+  ENCODE_FINISH(bl);
+}
+
+void ClientRequestHandlingRecorder::decode(bufferlist::iterator& bl)
+{
+  DECODE_START(2, bl);
+  ::decode(stamps, bl);
+  DECODE_FINISH(bl);
+}
+
+vector<ClientRequestHandlingRecorder::Duration> ClientRequestHandlingRecorder::generate_duration_list()
+{
+    vector<Duration> retvec;
+    utime_t last_end;
+    for (auto it = stamps.begin(); it != stamps.end(); it++) {
+      retvec.push_back(Duration(it->who, it->end - it->start, it->type, it->start - last_end));
+      last_end = it->end;
+    }
+    return retvec;
+}
+  
+vector<ClientRequestHandlingRecorder::Record> ClientRequestHandlingRecorder::peek() const
+{
+  vector<ClientRequestHandlingRecorder::Record> ret;
+  for (auto rec : stamps) {
+    ret.push_back(ClientRequestHandlingRecorder::Record(rec));
+  }
+  return ret;
+}
+
+bool ClientRequestHandlingRecorder::record_handle_time(mds_rank_t who, utime_t now)
+{
+    bool ret = true;
+    if (!stamps.empty()) {
+      Record & rec = stamps.back();
+      if (!rec.closed) {
+	stamps.pop_back();
+	ret = false;
+      }
+    }
+    stamps.push_back(Record(who, now));
+    return ret;
+}
+
+bool ClientRequestHandlingRecorder::record_end_time(mds_rank_t who, utime_t now, ClientRequestHandlingRecorder::RecordType type)
+{
+    if (stamps.empty())	return false;
+
+    Record & rec = stamps.back();
+    if (rec.closed) return false;
+    if (rec.who != who)	{
+      stamps.pop_back();
+      return false;
+    }
+    rec.record_decision(now, type);
+    return true;
+}
+
+void ClientRequestHandlingRecorder::claim(ClientRequestHandlingRecorder & another)
+{
+  for (Record & rec : another.stamps) {
+    stamps.push_back(Record(rec));
+  }
+}
+#endif /* class ClientRequestHandlingRecorder */

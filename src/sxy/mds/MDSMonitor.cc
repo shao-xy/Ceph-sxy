@@ -46,6 +46,14 @@ int MDSMonitor::iops()
   return iocnt;
 }
 
+int MDSMonitor::fwps()
+{
+  int cnt_now = mds->get_forwarded();
+  int fwcnt = cnt_now - m_last_forward;
+  m_last_forward = cnt_now;
+  return fwcnt;
+}
+
 mds_load_t MDSMonitor::mds_load()
 {
   return mds->balancer->get_load(ceph_clock_now());
@@ -55,6 +63,7 @@ void MDSMonitor::writelog()
 {
   std::stringstream ss;
   ss << "MDS_MONITOR IOPS " << iops(); // IOPS
+  ss << " FWPS " << fwps(); // Forwarded IOPS
   ss << " Inodes " << mds->mdcache->lru.lru_get_size(); // Cached inodes size
   mds_load_t load(mds_load());
   ss << " MDSLoad " << load;

@@ -9081,6 +9081,16 @@ void MDCache::request_forward(MDRequestRef& mdr, mds_rank_t who, int port)
   if (mdr->client_request && mdr->client_request->get_source().is_client()) {
     dout(7) << "request_forward " << *mdr << " to mds." << who << " req "
             << *mdr->client_request << dendl;
+#ifdef SXYMODMDS_FORWARDTRACE
+    dout(0) << SXYMODMDS_FORWARDTRACE << " request_forward " << *mdr << " to mds." << who << " req" << *mdr->client_request << mdr->client_request->srec << dendl;
+    mdr->client_request->record_mds_fwd_time(mds->get_nodeid(), ceph_clock_now());
+    dout(0) << SXYMODMDS_FORWARDTRACE << " request_forward after" << *mdr << " to mds." << who << " req" << *mdr->client_request << mdr->client_request->srec << dendl;
+    //dout(0) << SXYMODMDS_FORWARDTRACE << " request_forward " << *mdr << " to mds."
+    //        << who << " req " << *mdr->client_request << dendl;
+    if (mds->logger) {
+      dout(0) << SXYMODMDS_FORWARDTRACE << " total request_forward " << mds->get_forwarded() + 1 << " clientreq " << mdr->client_request->srec << dendl;
+    }
+#endif
     mds->forward_message_mds(mdr->client_request, who);
     mdr->client_request = 0;
     if (mds->logger) mds->logger->inc(l_mds_forward);
@@ -12021,7 +12031,17 @@ int MDCache::dump_cache(boost::string_view fn, Formatter *f,
 
 C_MDS_RetryRequest::C_MDS_RetryRequest(MDCache *c, MDRequestRef& r)
   : MDSInternalContext(c->mds), cache(c), mdr(r)
-{}
+#ifdef SXYMODMDS_FORWARDTRACE
+{
+  if (mdr->client_request && mdr->client_request->get_source().is_client()) {
+    dout(7) << "client request retry " << *mdr << dendl;
+    mdr->client_request->record_mds_retry_time(c->mds->get_nodeid(), ceph_clock_now());
+    //dout(0) << SXYMODMDS_FORWARDTRACE << " request_retry " << *mdr << " clientreq " << mdr->client_request->srec << dendl;
+  }
+}
+#else
+{ }
+#endif
 
 void C_MDS_RetryRequest::finish(int r)
 {

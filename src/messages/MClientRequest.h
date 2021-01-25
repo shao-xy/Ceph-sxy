@@ -55,6 +55,9 @@ class MClientRequest : public Message {
 public:
   struct ceph_mds_request_head head;
   utime_t stamp;
+#ifdef SXYMODMDS_FORWARDTRACE
+  ClientRequestHandlingRecorder srec;
+#endif
 
   struct Release {
     mutable ceph_mds_request_release item;
@@ -132,6 +135,12 @@ public:
 
   // normal fields
   void set_stamp(utime_t t) { stamp = t; }
+#ifdef SXYMODMDS_FORWARDTRACE
+  void record_mds_handle_time(mds_rank_t who, utime_t now) { srec.record_handle_time(who, now); }
+  void record_mds_fwd_time(mds_rank_t who, utime_t now) { srec.record_end_time(who, now, ClientRequestHandlingRecorder::RecordType::FORWARD); }
+  void record_mds_retry_time(mds_rank_t who, utime_t now) { srec.record_end_time(who, now, ClientRequestHandlingRecorder::RecordType::RETRY); }
+  void record_mds_reply_time(mds_rank_t who, utime_t now) { srec.record_end_time(who, now, ClientRequestHandlingRecorder::RecordType::REPLY); }
+#endif
   void set_oldest_client_tid(ceph_tid_t t) { head.oldest_client_tid = t; }
   void inc_num_fwd() { head.num_fwd = head.num_fwd + 1; }
   void set_retry_attempt(int a) { head.num_retry = a; }
@@ -175,6 +184,10 @@ public:
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
 
+#ifdef SXYMODMDS_FORWARDTRACE
+    ::decode(srec, p);
+#endif
+
     if (header.version >= 4) {
       ::decode(head, p);
     } else {
@@ -205,6 +218,9 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
+#ifdef SXYMODMDS_FORWARDTRACE
+    ::encode(srec, payload);
+#endif
     head.num_releases = releases.size();
     head.version = CEPH_MDS_REQUEST_HEAD_VERSION;
 

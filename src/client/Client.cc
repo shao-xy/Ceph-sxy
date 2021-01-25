@@ -97,6 +97,8 @@
 
 #include "include/cephfs/ceph_statx.h"
 
+#include "sxy/mds/macroconfig.h"
+
 #if HAVE_GETGROUPLIST
 #include <grp.h>
 #include <pwd.h>
@@ -1761,6 +1763,59 @@ int Client::make_request(MetaRequest *request,
   logger->tinc(l_c_reply, lat);
 
   put_request(request);
+
+#ifdef SXY_CLIENT_TRACE
+  ldout(cct, 0) << "Client Request op " << ceph_mds_op_name(request->get_op()) << " path " << request->get_filepath().get_path() << dendl;
+#endif
+#ifdef SXYMODMDS_FORWARDTRACE
+  // Model:
+  // Client => M1~M1 =retry=> M1~M1 =forward=> M2~M2 =reply=> Client
+  //
+  // total = end - start
+  // retry = handle + retry_wait
+  // forward = handle + forward_wait
+  // reply = all other
+  ldout(cct, 0) << "Client Request tid " << request->get_tid() << " op " << ceph_mds_op_name(request->get_op()) << " rawreply " << reply->srec << dendl;
+  utime_t retry_lat, forward_lat, reply_lat, total_lat = lat;
+  int fwd_count = 0;
+  int total_count = 1; // client->first mds
+  bool last_retry = false;
+  for (ClientRequestHandlingRecorder::Duration duration : reply->srec.generate_duration_list()) {
+    if (last_retry) {
+      last_retry = false;
+      retry_lat += duration.last_wait;
+    }
+    switch (duration.type) {
+      case ClientRequestHandlingRecorder::RecordType::FORWARD:
+	fwd_count += 1;
+	total_count += 1;
+	forward_lat += duration.delta;
+	break;
+
+      case ClientRequestHandlingRecorder::RecordType::RETRY:
+	last_retry = true;
+	total_count += 1;
+	retry_lat += duration.delta;
+	break;
+
+      case ClientRequestHandlingRecorder::RecordType::REPLY:
+	total_count += 1;
+	reply_lat += duration.delta;
+	break;
+
+      case ClientRequestHandlingRecorder::RecordType::_NULL:
+      default:
+	break;
+    }
+  }
+  utime_t total_netlat = total_lat - retry_lat - forward_lat - reply_lat;
+  double fwd_time = (double) forward_lat + (double) total_netlat * fwd_count / total_count;
+  double retry_time = (double) retry_lat;
+  double reply_time = (double) reply_lat;
+  double net_time = (double) total_netlat * (total_count - fwd_count) / total_count;
+
+  ldout(cct, 0) << SXYMODMDS_FORWARDTRACE << " Client Request op " << ceph_mds_op_name(request->get_op()) << " Totallat " << (double)total_lat << " FWD " << fwd_time << " RETRY " << retry_time << " HANDLE " << reply_time << " NET " << net_time << dendl;
+#endif
 
   reply->put();
   return r;

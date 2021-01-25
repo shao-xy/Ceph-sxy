@@ -928,10 +928,13 @@ void MDSRank::forward_message_mds(Message *m, mds_rank_t mds)
 						      client_must_resend),
 			    creq->get_source_inst());
 
+    dout(0) << SXYMODMDS_FORWARDTRACE << __func__ << " total request_forward " << get_forwarded() + 1 << " clientreq " << creq->get_tid() << creq->srec << dendl;
     if (client_must_resend) {
       m->put();
       return;
     }
+    // never here
+    dout(0) << SXYMODMDS_FORWARDTRACE << __func__ << " after total request_forward clientreq " << creq->get_tid() << creq->srec << dendl;
   }
 
   // these are the only types of messages we should be 'forwarding'; they

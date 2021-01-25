@@ -31,6 +31,8 @@
 #include "include/assert.h"
 #include <boost/serialization/strong_typedef.hpp>
 
+#include "sxy/mds/macroconfig.h"
+
 #define CEPH_FS_ONDISK_MAGIC "ceph fs volume v011"
 
 #define MDS_PORT_CACHE   0x200
@@ -1681,5 +1683,86 @@ struct keys_and_values
     qi::rule<Iterator, std::pair<string, string>()> pair;
     qi::rule<Iterator, string()> key, value;
 };
+
+#ifdef SXYMODMDS_FORWARDTRACE
+class ClientRequestHandlingRecorder {
+public:
+  enum class RecordType {
+    _NULL,
+    FORWARD,
+    RETRY,
+    REPLY,
+  };
+  struct Record {
+    mds_rank_t who;
+    utime_t start; // start handling: on leaving waiting queue
+    utime_t end; // end handling: forward, retry or reply
+    RecordType type;
+
+    bool closed;
+
+    Record() : Record(mds_rank_t(-1), utime_t()) {}
+    Record(const Record & another)
+      : who(another.who), start(another.start), end(another.end), type(another.type), closed(another.closed) {}
+    Record(mds_rank_t who, utime_t start)
+      : who(who), start(start), closed(false) {}
+    void record_decision(utime_t end, RecordType type = RecordType::_NULL) {
+      assert(!closed);
+      this->end = end;
+      this->type = type;
+      this->closed = true;
+    }
+    void encode(bufferlist& bl) const;
+    void decode(bufferlist::iterator& bl);
+  };
+  struct Duration {
+    mds_rank_t who;
+    utime_t delta;
+    RecordType type;
+    utime_t last_wait;
+
+    Duration(mds_rank_t who, utime_t delta, RecordType type) : Duration(who, delta, type, utime_t()) {}
+    Duration(mds_rank_t who, utime_t delta, RecordType type, utime_t last_wait)
+      : who(who), delta(delta), type(type), last_wait(last_wait) {}
+  };
+private:
+  vector<Record> stamps;
+public:
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  vector<Duration> generate_duration_list();
+
+  vector<Record> peek() const;
+  
+  bool record_handle_time(mds_rank_t who, utime_t now);
+  bool record_end_time(mds_rank_t who, utime_t now, RecordType type);
+
+  void claim(ClientRequestHandlingRecorder & another);
+};
+inline void encode(const ClientRequestHandlingRecorder::RecordType& type, bufferlist& bl)
+{
+  ::encode(static_cast<int>(type), bl);
+}
+inline void decode(ClientRequestHandlingRecorder::RecordType& type, bufferlist::iterator& bl)
+{
+  int int_type;
+  ::decode(int_type, bl);
+  type = static_cast<ClientRequestHandlingRecorder::RecordType>(int_type);
+}
+string sxy_request_handle_record_typename(ClientRequestHandlingRecorder::RecordType type);
+WRITE_CLASS_ENCODER(ClientRequestHandlingRecorder::Record)
+WRITE_CLASS_ENCODER(ClientRequestHandlingRecorder)
+inline std::ostream& operator<<(std::ostream& out, const ClientRequestHandlingRecorder::Record & rec) {
+    out << "Record(mds=" << rec.who << ",start=" << (double) rec.start << ",end=" << (double) rec.end << ",type=" << sxy_request_handle_record_typename(rec.type);
+    return out << ")";
+}
+inline std::ostream& operator<<(std::ostream& out, const ClientRequestHandlingRecorder & recorder) {
+    out << "RecordedClientRequest[";
+    for (ClientRequestHandlingRecorder::Record & rec : recorder.peek()) {
+      out << rec << ",";
+    }
+    return out << "]";
+}
+#endif /* class ClientRequestHandlingRecorder */
 
 #endif

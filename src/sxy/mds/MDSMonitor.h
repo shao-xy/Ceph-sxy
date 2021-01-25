@@ -21,6 +21,9 @@ class MDSMonitor : public Thread {
     int m_last_iocnt;
     int iops();
 
+    int m_last_forward;
+    int fwps();
+
     mds_load_t mds_load();
   
   private:
