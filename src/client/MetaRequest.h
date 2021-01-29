@@ -14,6 +14,8 @@
 
 #include "messages/MClientRequest.h"
 
+#include "sxy/mds/macroconfig.h"
+
 class MClientReply;
 class Dentry;
 class dir_result_t;
@@ -43,6 +45,10 @@ public:
   utime_t  sent_stamp;
   mds_rank_t mds;                // who i am asking
   mds_rank_t resend_mds;         // someone wants you to (re)send the request here
+#ifdef SXYMODMDS_FORWARDTRACE
+  //vector<utime_t> reject_fwd_stamps; // record each time when request is rejected
+  utime_t last_fwd_startstamp;	// it seems that only the last time should be recorded
+#endif
   bool     send_to_auth;       // must send to auth mds
   __u32    sent_on_mseq;       // mseq at last submission of this request
   int      num_fwd;            // # of times i've been forwarded

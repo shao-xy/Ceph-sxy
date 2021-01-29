@@ -1756,8 +1756,13 @@ int Client::make_request(MetaRequest *request,
     pdirbl->claim(reply->get_extra_bl());
 
   // -- log times --
+#ifdef SXYMODMDS_FORWARDTRACE
+  utime_t finish = ceph_clock_now();
+  utime_t lat = finish - request->sent_stamp;
+#else
   utime_t lat = ceph_clock_now();
   lat -= request->sent_stamp;
+#endif
   ldout(cct, 20) << "lat " << lat << dendl;
   logger->tinc(l_c_lat, lat);
   logger->tinc(l_c_reply, lat);
@@ -1775,10 +1780,12 @@ int Client::make_request(MetaRequest *request,
   // retry = handle + retry_wait
   // forward = handle + forward_wait
   // reply = all other
-  ldout(cct, 0) << "Client Request tid " << request->get_tid() << " op " << ceph_mds_op_name(request->get_op()) << " rawreply " << reply->srec << dendl;
-  utime_t retry_lat, forward_lat, reply_lat, total_lat = lat;
-  int fwd_count = 0;
-  int total_count = 1; // client->first mds
+  ldout(cct, 4) << "Client Request tid " << request->get_tid() << " op " << ceph_mds_op_name(request->get_op()) << " rawreply " << reply->srec << " firststart " << request->op_stamp.to_nsec() << " lastfwdts " << request->last_fwd_startstamp.to_nsec() << " lateststart " << request->sent_stamp.to_nsec() << dendl;
+  utime_t retry_lat, reply_lat, forward_lat, total_lat = finish - request->op_stamp;
+  if (request->num_fwd > 0) {
+    forward_lat = request->last_fwd_startstamp - request->op_stamp;
+  }
+  //ldout(cct, 0) << " fwdlat = " << forward_lat.to_nsec() << dendl;
   bool last_retry = false;
   for (ClientRequestHandlingRecorder::Duration duration : reply->srec.generate_duration_list()) {
     if (last_retry) {
@@ -1786,20 +1793,12 @@ int Client::make_request(MetaRequest *request,
       retry_lat += duration.last_wait;
     }
     switch (duration.type) {
-      case ClientRequestHandlingRecorder::RecordType::FORWARD:
-	fwd_count += 1;
-	total_count += 1;
-	forward_lat += duration.delta;
-	break;
-
       case ClientRequestHandlingRecorder::RecordType::RETRY:
 	last_retry = true;
-	total_count += 1;
 	retry_lat += duration.delta;
 	break;
 
       case ClientRequestHandlingRecorder::RecordType::REPLY:
-	total_count += 1;
 	reply_lat += duration.delta;
 	break;
 
@@ -1809,12 +1808,8 @@ int Client::make_request(MetaRequest *request,
     }
   }
   utime_t total_netlat = total_lat - retry_lat - forward_lat - reply_lat;
-  double fwd_time = (double) forward_lat + (double) total_netlat * fwd_count / total_count;
-  double retry_time = (double) retry_lat;
-  double reply_time = (double) reply_lat;
-  double net_time = (double) total_netlat * (total_count - fwd_count) / total_count;
 
-  ldout(cct, 0) << SXYMODMDS_FORWARDTRACE << " Client Request op " << ceph_mds_op_name(request->get_op()) << " Totallat " << (double)total_lat << " FWD " << fwd_time << " RETRY " << retry_time << " HANDLE " << reply_time << " NET " << net_time << dendl;
+  ldout(cct, 0) << SXYMODMDS_FORWARDTRACE << " ClientRequestSummary op " << ceph_mds_op_name(request->get_op()) << " FWDNUM " << request->num_fwd << " Totallat " << (double) total_lat << " FWD " << (double) forward_lat << " RETRY " << (double) retry_lat << " HANDLE " << (double) reply_lat << " NET " << (double) total_netlat << dendl;
 #endif
 
   reply->put();
@@ -2299,6 +2294,13 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
 	   << " to mds." << fwd->get_dest_mds() 
 	   << ", resending to " << fwd->get_dest_mds()
 	   << dendl;
+#ifdef SXYMODMDS_FORWARDTRACE
+  ldout(cct, 9) << SXYMODMDS_FORWARDTRACE << " handle_client_request tid " << tid
+	   << " fwd " << fwd->get_num_fwd() 
+	   << " to mds." << fwd->get_dest_mds() 
+	   << ", resending to " << fwd->get_dest_mds()
+	   << dendl;
+#endif
   
   request->mds = -1;
   request->item.remove_myself();
@@ -2307,6 +2309,9 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
   request->caller_cond->Signal();
 
   fwd->put();
+
+  //request->reject_fwd_stamps.push_back(ceph_clock_now());
+  request->last_fwd_startstamp = ceph_clock_now();
 }
 
 bool Client::is_dir_operation(MetaRequest *req)
