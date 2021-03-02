@@ -97,7 +97,7 @@
 
 #include "include/cephfs/ceph_statx.h"
 
-#include "sxy/mds/macroconfig.h"
+#include "sxy/macroconfig.h"
 
 #if HAVE_GETGROUPLIST
 #include <grp.h>
@@ -2311,7 +2311,9 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
   fwd->put();
 
   //request->reject_fwd_stamps.push_back(ceph_clock_now());
+#ifdef SXYMODMDS_FORWARDTRACE
   request->last_fwd_startstamp = ceph_clock_now();
+#endif
 }
 
 bool Client::is_dir_operation(MetaRequest *req)

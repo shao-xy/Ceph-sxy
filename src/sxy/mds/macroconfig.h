@@ -6,6 +6,6 @@
 #define SXYMOD_MDS
 #endif
 
-#define SXYMODMDS_FORWARDTRACE "SXYMODMDS_FORWARDTRACE"
+//#define SXYMODMDS_FORWARDTRACE "SXYMODMDS_FORWARDTRACE"
 
 #endif /* sxy/mds/macroconfig.h */
