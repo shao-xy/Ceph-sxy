@@ -1709,6 +1709,16 @@ int Client::make_request(MetaRequest *request,
       session = mds_sessions[mds];
     }
 
+#ifdef SXY_CLIENT_TRACE
+    filepath fp;
+    Inode * in = request->inode();
+    if (in) {
+      in->make_long_path(fp);
+    }
+    //ldout(cct, 0) << "Client Request targetmds " << mds << " op " << ceph_mds_op_name(request->get_op()) << " inodepath " << fp.get_path() << " targetpath " << request->get_filepath().get_path() << dendl;
+    //ldout(cct, 0) << "Client Request targetmds " << mds << " op " << ceph_mds_op_name(request->get_op()) << " inodedepth " << fp.depth() << " targetpath " << request->get_filepath().get_path() << dendl;
+    ldout(cct, 0) << "Client Request targetmds " << mds << " inodedepth " << fp.depth() << dendl;
+#endif
     // send request.
     send_request(request, session);
 
@@ -1769,9 +1779,6 @@ int Client::make_request(MetaRequest *request,
 
   put_request(request);
 
-#ifdef SXY_CLIENT_TRACE
-  ldout(cct, 0) << "Client Request op " << ceph_mds_op_name(request->get_op()) << " path " << request->get_filepath().get_path() << dendl;
-#endif
 #ifdef SXYMODMDS_FORWARDTRACE
   // Model:
   // Client => M1~M1 =retry=> M1~M1 =forward=> M2~M2 =reply=> Client
