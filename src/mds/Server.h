@@ -31,6 +31,12 @@ class MClientRequest;
 class MClientReply;
 class MDLog;
 
+#ifdef SXYMOD_MDS
+namespace sxy {
+class FactorTracer;
+};
+#endif
+
 enum {
   l_mdss_first = 1000,
   l_mdss_dispatch_client_request,
@@ -309,6 +315,10 @@ public:
 
 private:
   void reply_client_request(MDRequestRef& mdr, MClientReply *reply);
+
+#ifdef SXYMOD_MDS
+  friend class sxy::FactorTracer;
+#endif
 };
 
 #endif

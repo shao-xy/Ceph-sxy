@@ -9,22 +9,32 @@
 #include "mds/mdstypes.h"
 
 #include "macroconfig.h"
+#include "sxy/common/DeltaTracer.h"
 
 class MDSRank;
 
 namespace sxy {
 
+class FactorTracer : public DeltaTracerWatcher<int, int> {
+    MDSRank * mds;
+    bool use_server;
+
+  public:
+    FactorTracer(MDSRank * mds, bool use_server, int factoridx);
+    int check_now(int idx) override;
+};
+
 class MDSMonitor : public Thread {
     MDSRank * mds;
     bool m_runFlag;
   
-    int m_last_iocnt;
-    int iops();
+    FactorTracer iops_tracer;
+    FactorTracer fwps_tracer;
 
     mds_load_t mds_load();
   
   private:
-    void writelog();
+    void update_and_writelog();
   protected:
     void * entry() override;
   

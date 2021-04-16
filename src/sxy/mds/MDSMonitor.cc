@@ -7,6 +7,7 @@
 
 #include "common/debug.h"
 #include "mds/MDSRank.h"
+#include "mds/Server.h"
 #include "mds/MDBalancer.h"
 
 #define dout_context g_ceph_context
@@ -16,8 +17,23 @@
 
 namespace sxy {
 
+FactorTracer::FactorTracer(MDSRank * mds, bool use_server, int factoridx)
+  : DeltaTracerWatcher<int, int>(factoridx), mds(mds), use_server(use_server)
+{
+  init_now();
+} 
+
+int FactorTracer::check_now(int idx) {
+  if (use_server)
+    return mds->server->logger ? mds->server->logger->get(idx) : 0;
+  else
+    return mds->logger ? mds->logger->get(idx) : 0;
+}
+
 MDSMonitor::MDSMonitor(MDSRank * mds)
-    : mds(mds), m_runFlag(true), m_last_iocnt(0L)
+    : mds(mds), m_runFlag(true),
+    iops_tracer(mds, false, l_mds_request),
+    fwps_tracer(mds, false, l_mds_forward)
 {
   // We start immediately in constructor function
   dout(0) << "Launching monitor thread " << dendl;
@@ -38,23 +54,16 @@ MDSMonitor::~MDSMonitor()
   }
 }
 
-int MDSMonitor::iops()
-{
-  int cnt_now = mds->get_req_rate();
-  int iocnt = cnt_now - m_last_iocnt;
-  m_last_iocnt = cnt_now;
-  return iocnt;
-}
-
 mds_load_t MDSMonitor::mds_load()
 {
   return mds->balancer->get_load(ceph_clock_now());
 }
 
-void MDSMonitor::writelog()
+void MDSMonitor::update_and_writelog()
 {
   std::stringstream ss;
-  ss << "MDS_MONITOR IOPS " << iops(); // IOPS
+  ss << "MDS_MONITOR IOPS " << iops_tracer.get(true); // IOPS
+  ss << " FWPS " << fwps_tracer.get(true); // FWPS
   ss << " Inodes " << mds->mdcache->lru.lru_get_size(); // Cached inodes size
   mds_load_t load(mds_load());
   ss << " MDSLoad " << load;
@@ -66,7 +75,7 @@ void * MDSMonitor::entry()
   dout(0) << "MDS_MONITOR thread start." << dendl;
   while (m_runFlag) {
     sleep(1);
-    writelog();
+    update_and_writelog();
   }
   dout(0) << "MDS_MONITOR thread stop." << dendl;
   return NULL;
